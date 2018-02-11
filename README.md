@@ -1,0 +1,2 @@
+# fxdl
+cnnでfx予想
