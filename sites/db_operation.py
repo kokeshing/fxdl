@@ -160,6 +160,71 @@ class DB_operation:
         cur.execute(strSQL)
         return cur.fetchall()
 
+    def update_result(self, YMD, result, prd_true_flg):
+        strSQL = 'UPDATE t_ratelog SET result = %d, prd_true_flg = %d WHERE YMD = \'%s\'' % (result, prd_true_flg, YMD)
+        self.cn.ping(reconnect=True)
+        cur = self.cn.cursor()
+
+        try:
+            cur.execute(strSQL)
+            self.cn.commit()
+        except:
+            self.cn.rollback()
+            raise
+    
+    def check_result(self):
+        now = datetime.now()
+        start = (now - timedelta(days=2)).strftime('%Y-%m-%d 23:38:00')
+        end   = (now - timedelta(days=1)).strftime('%Y-%m-%d 23:30:00')
+        strSQL = 'SELECT * FROM t_ratelog WHERE (predict != -1) AND (YMD BETWEEN \'%s\' AND \'%s\') ORDER BY YMD ASC' % (start, end)
+        
+        resultSQL = self.select_Query(strSQL)
+
+        for row in resultSQL:
+            ymd = (row['YMD']).strftime('%Y-%m-%d %H:%M:00')
+            ymd_af30 = (row['YMD'] + timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:00')
+            selectSQL = 'SELECT * FROM t_ratelog WHERE YMD = \'%s\'' % ymd_af30
+
+            result_af30 = select_Query(selectSQL)
+            
+            if result_af30[0]['Close'] > row['High']:
+                result = 2
+                prd_true_flg = 1 if row['predict'] == result else 0
+            elif result_af30[0]['Close'] < row['Low']:
+                result = 0
+                prd_true_flg = 1 if row['predict'] == result else 0
+            else:
+                result = 1
+                prd_true_flg = 1 if row['predict'] == result else 0
+
+            update_result(ymd, result, prd_true_flg)
+
+    def count_sql(self, strWHERE):
+        strSQL = 'SELECT count(*) FROM ' + strWHERE
+        result = select_Query(strSQL)
+
+        return result[0]['count(*)']
+
+    def check_hit_rate(self):
+        update_ymd = (datetime.now()).strftime('%Y-%m-%d')
+        strWHEREhit = 't_ratelog WHERE prd_true_flg = 1'
+        result_hit = count_sql(strWHEREhit)
+        
+        strWHEREnohit = 't_ratelog WHERE prd_true_flg = 0'
+        result_no_hit = count_sql(strWHEREnohit)
+
+        strSQL = 'INSERT INTO t_ratelog (YMD, hit_predict, no_hit_predict) VALUES (\'%s\', %d, %d)' % (update_ymd, result_hit, result_no_hit)
+        self.cn.ping(reconnect=True)
+        cur = self.cn.cursor()
+
+        try:
+            cur.execute(strSQL)
+            self.cn.commit()
+        except:
+            self.cn.rollback()
+            raise
+
+
 
 
 
